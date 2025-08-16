@@ -75,24 +75,9 @@ jobs:
           path: ./connectedhomeip.tar.zst
 
   build_linux_examples:
-    name: Build example apps for Linux (${{ matrix.arch.name }})
+    name: Build example apps for Linux (arm7)
     needs: build_prepare
-
-    strategy:
-      matrix:
-        arch:
-          - name: x86-64
-            runner: ubuntu-22.04
-            example-prefix: linux-x64-
-          - name: aarch64
-            runner: linux-arm64
-            example-prefix: linux-arm64-
-        include:
-          - examples: >-
-              ota-provider
-            variant: -libnl-no-ble-no-wifi-no-thread-boringssl
-
-    runs-on: ${{ matrix.arch.runner }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write # for actions/upload-release-asset to upload release asset
 
@@ -122,47 +107,43 @@ jobs:
       - name: Bootstrap
         run: bash scripts/bootstrap.sh -p all,linux
       - name: Setup and run build
-        run: |
-          mkdir bin/
-          ./scripts/examples/gn_build_example.sh \
-              examples/ota-provider-app/linux/ \
-              out/ \
-              chip_project_config_include_dirs=\[\"//../../../..\"\] \
-              chip_crypto=\"boringssl\" \
-              chip_config_network_layer_ble=false \
-              chip_enable_wifi=false \
-              chip_enable_openthread=false \
-              chip_exchange_node_id_logging=true \
-              chip_mdns=\"minimal\" \
-              chip_minmdns_default_policy=\"libnl\" \
-              chip_use_data_model_interface=\"enabled\"
-          cp out/chip-ota-provider-app bin/
-      - name: Rename and strip symbols
-        run: |
-          for example in bin/*; do
-              mv "${example}" "${example}-${{ matrix.arch.name }}"
-          done
-          for example in bin/*; do
-              objcopy --only-keep-debug "${example}" "${example}.debug"
-              strip --strip-debug "${example}"
-              objcopy --add-gnu-debuglink="${example}.debug" "${example}"
-          done
+        uses: pguyot/arm-runner-action@v2
+        with:
+          commands: |
+            mkdir bin/
+            ./scripts/examples/gn_build_example.sh \
+                examples/ota-provider-app/linux/ \
+                out/ \
+                chip_project_config_include_dirs=\[\"//../../../..\"\] \
+                chip_crypto=\"boringssl\" \
+                chip_config_network_layer_ble=false \
+                chip_enable_wifi=false \
+                chip_enable_openthread=false \
+                chip_exchange_node_id_logging=true \
+                chip_mdns=\"minimal\" \
+                chip_minmdns_default_policy=\"libnl\" \
+                chip_use_data_model_interface=\"enabled\"
+            cp out/chip-ota-provider-app bin/
+
+            for example in bin/*; do
+                mv "${example}" "${example}-arm7"
+            done
+            for example in bin/*; do
+                objcopy --only-keep-debug "${example}" "${example}.debug"
+                strip --strip-debug "${example}"
+                objcopy --add-gnu-debuglink="${example}.debug" "${example}"
+            done
       - name: Upload binaries as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: chip-linux-example-apps-${{ matrix.arch.name }}
+          name: chip-linux-example-apps-arm7
           path: |
             ./connectedhomeip/bin/
             !./connectedhomeip/bin/*.debug
       - name: Upload debug symbols as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: chip-linux-example-apps-debug-${{ matrix.arch.name }}
+          name: chip-linux-example-apps-debug-arm7
           path: |
             ./connectedhomeip/bin/*.debug
-      - name: Upload binaries as release assets
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ./connectedhomeip/bin/*
 
